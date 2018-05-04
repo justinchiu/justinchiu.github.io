@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="x-ua-compatible" content="ie=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Compression and Phrases</title>
+        <!-- Try katex -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css" integrity="sha384-TEMocfGvRuD1rIAacqrknm5BQZ7W7uWitoih+jMNFXQIbNl16bO8OZmylH/Vi/Ei" crossorigin="anonymous">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js" integrity="sha384-jmxIlussZWB7qCuB+PgKG1uLjjxbVVIayPJwi6cG6Zb4YKq0JIw+OMnkkEC7kYCq" crossorigin="anonymous"></script>
+        <!-- Katex auto rendering -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/contrib/auto-render.min.js" integrity="sha384-IiI65aU9ZYub2MY9zhtKd1H2ps7xxf+eb2YFG9lX6uRqpXCvBTOidPRCXCrQ++Uc" crossorigin="anonymous"></script>
+        <!-- pseudocode -->
+        <link rel="stylesheet" href="../js/pseudocode.js-1.1/pseudocode.min.css">
+        <script src="../js/pseudocode.js-1.1/pseudocode.min.js"></script>
+        <!-- my css -->
+        <link rel="stylesheet" href="../css/default.css" />
+    </head>
+    <body>
+        <header>
+            <nav>
+                <a href="../">home</a>
+                <a href="../about.html">about</a>
+                <a href="../contact.html">contact</a>
+                <a href="../archive.html">archive</a>
+            </nav>
+        </header>
+
+        <main role="main">
+            <h1>Compression and Phrases</h1>
+            <article>
+    <section class="header">
+        Posted on March  1, 2018
+        
+    </section>
+    <section>
+        <h1 id="segmentations">Segmentations</h1>
+<h2 id="bpe">BPE</h2>
+<p>The BPE algorithm is credited to <a href="http://dl.acm.org/citation.cfm?id=177910.177914">Philip Gage</a> and was popularized in NMT by <a href="https://arxiv.org/abs/1508.07909">Sennrich et al.</a>.</p>
+<p>Define <code>fresh</code> to be a function that returns a fresh variable from a class of strings that does not appear in the corpus. For example, we could have <code>fresh</code> return elements in the language <span class="math inline">\(\{\#\sigma^+ \mid \sigma \in \{A,\ldots,Z\}\}\)</span>.</p>
+<p>Byte pair encoding is pretty simple. We merge the most frequent pair of symbols into a new symbol and apply this recursively. As for encoding a new corpus, we simply apply the merge operations in the order they were learned.</p>
+<pre id="learnbpe" style="display:none;">
+\begin{algorithm}
+\caption{The BPE algorithm}
+\begin{algorithmic}
+\procedure{LearnBpe}{numMerges, corpus}
+\state merges $\gets$ []
+\while{len(merges) $\leq$ numMerges}
+    \state bigramCounts $\gets$ \call{CountBigrams}{corpus}
+    \state merge $\gets$ \call{MostFrequent}{bigramCounts}
+    \state \call{RemoveBigram}{corpus, merge, \call{Fresh}{}}
+    \state append merge to merges
+\endwhile
+\return merges
+\endprocedure
+\procedure{ApplyBpe}{merges, corpus}
+\for{merge \textbf{in} merges}
+    \state corpus $\gets$ \call{ApplyMerge}{corpus, merge}
+\endfor
+\return corpus
+\endprocedure
+\end{algorithmic}
+\end{algorithm}
+</pre>
+<script>
+var el = document.getElementById("learnbpe")
+var code = el.textContent;
+var parentEl = el.parentElement;
+var options = {
+    lineNumber: true
+};
+pseudocode.render(code, parentEl, options);
+//var htmlStr = pseudocode.renderToString(code, options);
+//console.log(htmlStr);
+</script>
+<h2 id="google-word-pieces">Google Word Pieces</h2>
+<p>The approach used in Google’s <a href="https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/37842.pdf">word pieces</a> (and subsequently used in <a href="https://arxiv.org/abs/1609.08144">translation</a> and <a href="https://arxiv.org/abs/1712.06855">another speech system</a>) is similarly simple. Rather than combining the most frequent bigram, they greedily combine bigrams that increase the performance of an ngram language model. This can be interpreted as a coordinate ascent technique.</p>
+<h1 id="lsd">LSD</h1>
+<p>Following the spirit of the <a href="https://arxiv.org/abs/1610.03035">Latent Sequence Decomposition</a> paper, we will define the problem more formally. The LSD paper is concerned with the following: given an input <span class="math inline">\(\mathbf{x}\in\bX\)</span> and a target <span class="math inline">\(\mathbf{y}\in\bY\)</span>. The paper postulates that a probabilistic decomposition of the target sequence conditioned on both the input sequence and output sequence is superior to a deterministic decomposition that is only a function of the output sequence, as in most cases. Note that this is not exactly true for BPE with a joint vocabulary over source and target.</p>
+<p>Rather than defining a deterministic <span class="math inline">\(f:\bY\to\bZ\)</span>, since knowing the optimal segmentation of <span class="math inline">\(\mathbf{y}\)</span> is a nontrivial task, they propose to model <span class="math inline">\(\mathbf{y}\)</span> by marginalizing over all segmentations <span class="math inline">\(\mathbf{z}\)</span>. <span class="math display">\[
+\begin{aligned}
+\log p_\theta(\by\mid\bx) &amp;= \log \sum_{\bz\in\bZ}p_\theta(\by,\bz\mid\bx)\\
+&amp;= \log\sum_{\bz\in\bZ}p(\by\mid\bz,\bx)p_\theta(\bz\mid\bx)\\
+&amp;= \log\sum_{\bz\in\bZ}p(\by\mid\bz)p_\theta(\bz\mid\bx).
+\end{aligned}
+\]</span> Since <span class="math inline">\(p(\by\mid\bz)\)</span> is deterministic, as one can simply concatenate or split segmentations, it does not need parameters to model the distribution of <span class="math inline">\(\by\mid\bz\)</span>. They then perform approximate inference via beam search. As for the gradient of <span class="math inline">\(p(\by\mid\bx)\)</span>, they use the log derivative trick twice. Recall the log derivative trick is <span class="math inline">\(\nabla\log f(\bx) = \frac{\nabla f(\bx)}{f(\bx)}\)</span>, which implies <span class="math inline">\(f(\bx)\nabla \log f(\bx) = \nabla f(\bx)\)</span>. The goal here is to express the derivative as the expectation of some function of <span class="math inline">\(\bx\)</span> wrt the distribution over <span class="math inline">\(\bz\mid\by,\bx\)</span>. The gradient is given by <span class="math display">\[
+\begin{aligned}
+\nabla_\theta\log p_\theta(\by\mid\bx)
+&amp;= \frac{1}{p_\theta(\by\mid\bx)}\nabla_\theta p_\theta(\by\mid\bx)\\
+&amp;= \frac{1}{p_\theta(\by\mid\bx)} \sum_{\bz}\nabla_\theta p_\theta(\by,\bz\mid\bx)\\
+&amp;= \frac{1}{p_\theta(\by\mid\bx)}\sum_{\bz} p(\by\mid\bz,\bx) \nabla_\theta p_\theta(\bz\mid\bx)\\
+&amp;= \frac{1}{p_\theta(\by\mid\bx)}\sum_{\bz} p(\by\mid\bz,\bx)p_\theta(\bz\mid\bx) \nabla_\theta \log p_\theta(\bz\mid\bx)\\
+&amp;= \frac{1}{p_\theta(\by\mid\bx)}\sum_{\bz} p_\theta(\by,\bz\mid\bx) \nabla_\theta \log p_\theta(\bz\mid\bx)\\
+&amp;= \sum_{\bz} \frac{p_\theta(\by,\bz\mid\bx)}{p_\theta(\by\mid\bx)} \nabla_\theta \log p_\theta(\bz\mid\bx)\\
+&amp;= \sum_{\bz} p_\theta(\bz\mid\by,\bx) \nabla_\theta \log p_\theta(\bz\mid\bx)\\
+&amp;= \mathbf{E}_{\bz\thicksim p_\theta(\bz\mid\by,\bx)}[ \nabla_\theta \log p_\theta(\bz\mid\bx) ].
+\end{aligned}
+\]</span> When sampling from <span class="math inline">\(z_t\mid\bz_{&lt;t},\by,\bx\)</span> they assign probability 0 to invalid extentions. This implies that they do not sample from <span class="math inline">\(\bz\mid\by,\bx\)</span>. As detailed here <a href="http://repository.cmu.edu/cgi/viewcontent.cgi?article=1762&amp;context=dissertations">in the author’s thesis</a>: <span class="math display">\[
+\begin{aligned}
+\nabla_\theta\log p_\theta(\by\mid\bx)
+&amp;= \frac{1}{p_\theta(\by\mid\bx)}\sum_{\bz} \bm{1}(\by=\bz)p_\theta(\bz\mid\bx) \nabla_\theta\log p_\theta(\bz\mid\bx)\\
+&amp;= \sum_{\bz} \frac{p_\theta(\by,\bz\mid\bx)}{\sum_{\bz'}p_\theta(\by,\bz'\mid\bx)} \nabla_\theta\log p_\theta(\bz\mid\bx)\\
+&amp;= \sum_{\bz} \frac{\bm{1}(\bz = \by)p_\theta(\bz\mid\bx)}{\sum_{\bz'}\bm{1}(\bz' = \by)p_\theta(\bz'\mid\bx)}
+    \nabla_\theta\log p_\theta(\bz\mid\bx)
+\end{aligned}
+\]</span> They compare all possible hypotheses together, including those that span multiple time steps. They say this leads to bias a bias towards longer sequences in sampling, since they compare “c”, “ca”, and “cat” all at the same time. However, they found that despite their hypothesis that the sampling is biased towards longer segmentations the model learns, without regularization, to only output single characters. They then use an entropy regularization term (they also refer to it as an <span class="math inline">\(\epsilon\)</span>-greedy strategy), or a mixture with a uniform prior over outputs (they anneal the mixing coefficient over time).</p>
+<p>At test time, they use beam search to arrive at a segmentation. Since there is no reference <span class="math inline">\(\by\)</span> available, all <span class="math inline">\(\bz\)</span> hypotheses are considered. No marginalization is actually performed, since it seems like only a single Monte Carlo sample is taken, but I could be mistaken. The marginal probability of <span class="math inline">\(\by\mid\bx\)</span> could probably be computed pretty easily, though.</p>
+<p>In their experiments they take ngrams from <span class="math inline">\(n\in\{2,3,4,5\}\)</span> and use the <span class="math inline">\(\{256,512,1024\}\)</span> most frequent based on occurrences in the training set. A quick description of their baseline segmentation method: they use the same ngrams but instead of having a distribution over segmentations, they simply take the largest valid segmentation at each time step greedily from left to right. Interestingly, they find that this “MaxExt” (max extension) decomposition hurts their performance versus the character baseline. They do not compare against BPE or wordpieces, which people have found success with. In the previously mentioned <a href="https://arxiv.org/abs/1712.01769">paper</a>, they saw a slight increase, or at least no drop in performance (more likely no drop) with wordpieces. How could the segmentation scheme have such a large effect on performance?</p>
+<h2 id="comparison-of-my-segmentation-procedure-to-maxext">Comparison of my segmentation procedure to MaxExt</h2>
+<p>The ngrams are gathered in a similar way, where they take the K most frequent 2 through N grams. Where MaxExt greedily chooses the longest valid extension, I instead iterate from N through 2 and substitute constituents with phrases using the segmentation that maximize the number of replaced constituents.</p>
+<h1 id="multiscale-sequence-dictionary-learning">Multiscale Sequence Dictionary Learning</h1>
+<p>The <a href="https://arxiv.org/abs/1707.00762">paper</a> by Merrienboer et. al. uses 2,048 crossword pieces on PTB and 16,384 crossword pieces on text8 and sees a bit of improvement over both. The interesting part of this work is that they actually marginalize over all possible decompositions <span class="math inline">\(\bz\)</span> of a sequence <span class="math inline">\(\by\)</span>, whereas LSD uses a (or possibly multiple) Monte Carlo samples. Less relevant (but still interesting) is this work’s incorporation of marginalization into the actually RNN computation.</p>
+<h2 id="marginal-likelihood-calculations">Marginal likelihood calculations</h2>
+<pre id="ml" style="display:none;">
+\begin{algorithm}
+\caption{Marginal Likelihood and Gradient (in more detail)}
+\begin{algorithmic}
+\procedure{MarginalLikelihood}{$\mathbf{y}, \mathcal{Z}, \mathbf{x}, p_\theta(\cdot)$}
+\state $p(y_0\mid\mathbf{x}) = p_\theta(y_i\mid\mathbf{x})$
+\for{$t$ \textbf{in} $1,\ldots,|\mathbf{y}|$}
+    \state $p(y_0, \ldots, y_t) = 1$
+\endfor
+\return lol
+\endprocedure
+\procedure{gML}{$\mathbf{y}, \mathcal{Z}, \mathbf{x}$}
+\for{merge \textbf{in} merges}
+    \state corpus $\gets$ \call{ApplyMerge}{corpus, merge}
+\endfor
+\return corpus
+\endprocedure
+\end{algorithmic}
+\end{algorithm}
+</pre>
+<script>
+var el = document.getElementById("ml")
+var code = el.textContent;
+var parentEl = el.parentElement;
+var options = {
+    lineNumber: true
+};
+pseudocode.render(code, parentEl, options);
+//var htmlStr = pseudocode.renderToString(code, options);
+//console.log(htmlStr);
+</script>
+<h1 id="other-compression-schemes">Other compression schemes</h1>
+<p>Do they make sense for phrases?</p>
+<h1 id="analysis-of-bpe-vs-ngram">Analysis of BPE vs ngram</h1>
+<table>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Segmentation</th>
+<th style="text-align: right;">Train Length</th>
+<th style="text-align: right;">Avg Sen Len</th>
+<th style="text-align: right;">Avg unit len</th>
+<th style="text-align: right;">Phrase Count</th>
+<th style="text-align: right;">Atom Count</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Word</td>
+<td style="text-align: right;">3273295</td>
+<td style="text-align: right;">20.4</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">3273295</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Ngrams 42k</td>
+<td style="text-align: right;">2036480</td>
+<td style="text-align: right;">12.7</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">769282</td>
+<td style="text-align: right;">1267204</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">BPE (Joint 40k)</td>
+<td style="text-align: right;">4434910</td>
+<td style="text-align: right;">27.7</td>
+<td style="text-align: right;">3.5</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">4434910</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Xword BPE 32k</td>
+<td style="text-align: right;">2801504</td>
+<td style="text-align: right;">17.5</td>
+<td style="text-align: right;">5.9</td>
+<td style="text-align: right;">729233</td>
+<td style="text-align: right;">2072277</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Xword BPE 64k</td>
+<td style="text-align: right;">2583680</td>
+<td style="text-align: right;">16.1</td>
+<td style="text-align: right;">6.4</td>
+<td style="text-align: right;">790425</td>
+<td style="text-align: right;">1793261</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Xword 32k unk</td>
+<td style="text-align: right;">2784290</td>
+<td style="text-align: right;">17.4</td>
+<td style="text-align: right;">5.9</td>
+<td style="text-align: right;">729118</td>
+<td style="text-align: right;">2055178</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Xword 64k unk</td>
+<td style="text-align: right;">2574701</td>
+<td style="text-align: right;">16.1</td>
+<td style="text-align: right;">6.3</td>
+<td style="text-align: right;">789141</td>
+<td style="text-align: right;">1785566</td>
+</tr>
+</tbody>
+</table>
+<p>Since the phrase counts are similar, we posit that both techniques (XBPE and greedy) result in somewhat similar ngrams, which we checked by eye.</p>
+<p>Suppose that BPE mainly merges subword units before getting to xword. If we reorder the merge agenda so that all subword merges happen before phrases, we should get an upper bound on the number of subword units. An approximate lower bound on the length of this pure subword corpus is given by the length of the BPE corpus. We then note that the compression ratio from word to ngram is 1.6x, and from word to XBPE 32k is 1.2x. However, when working with the subword upper bound, we get a compression ratio from BPE to XBPE 32k of 1.6x.</p>
+<p>Rare words do not seem to be a large factor in the length expansion, as the corpus statistics are relatively unchanged after unk-ing words that occur fewer than 3 times and an inspection by eye of the vocabulary leads us to believe the two are quite similar.</p>
+<p>Oddity in all BPE subword models: certain obvious constructions like “&amp; apos ;” do not get merged, which is pretty surprising. Is this a bug?</p>
+<p>The objective is minimize total emission length. Given a super-type inventory <span class="math inline">\(\Sigma\)</span>, the objective decomposes into <span class="math display">\[\mathcal{J}(\Sigma) = \sum_{x\in\Sigma} \textrm{len}(x) * \textrm{freq}(x).\]</span> We can define <span class="math inline">\(\Sigma\)</span></p>
+<p>Is ngram the maximizer of objective <span class="math inline">\(\mathcal{J}\)</span>?</p>
+<h1 id="a-retake-on-phrases-as-compression">A Retake on Phrases as Compression</h1>
+<p>Let us consider the problem of lossless source encoding of phrases more formally. We claim that the problem of selecting a phrase vocabulary is equivalent to the problem considered by Tunstall coding. We take a brief segway and give a very overview of Tunstall coding.</p>
+<h2 id="tunstall-coding">Tunstall Coding</h2>
+<p>We have a fixed size dictionary or codebook <span class="math inline">\(\mathcal{D}\)</span> of symbols and would like to learn a map <span class="math inline">\(f: \Sigma^+ \to \mathcal{D}\)</span>. The representation of each symbol in <span class="math inline">\(\mathcal{D}\)</span> has size <span class="math inline">\(\log |\mathcal{D}|\)</span>. The algorithm learns a parse tree in a top down fashion by starting with all characters in the alphabet <span class="math inline">\(\Sigma\)</span> as children of the root node, then expanding the leaf node that has highest frequency or probability. The goal of Tunstall coding is to maximize the expected length of the covered source sequence per codeword or solve the problem <span class="math display">\[{\arg\max}_\mathcal{D} \sum_{w\in\mathcal{D}} p(w)\ell(w),\]</span> where <span class="math inline">\(\ell(w)\)</span> is the number of source symbols encoded by <span class="math inline">\(w\)</span>.</p>
+<h2 id="argument-for-a-word-based-approach">Argument for a word-based approach</h2>
+<p>The above argument, that Tunstall coding or various other Variable-to-Fixed encoding maximize entropy, holds for a lossless approach. However, if we care more about the expected length than retaining losslessness maybe we can do better.</p>
+<p>The efficiency of compression methods is lower bounded by the entropy of the source.</p>
+<p>The average code length is an upper bound on the entropy of the source.</p>
+<p>The Tunstall coding algorithm finds the parse tree that maximizes the average parse string length, or equivalently whose induced distribution has maximum entropy. Why?</p>
+<p>Can we apply inside outside using the full tree?</p>
+<p>Tunstall coding maximizes entropy of the codes. Ideally, it creates a codebook where every word is equiprobable. Coding algorithms seek to minimize the expected code length, which in the case of Tunstall codes is given by <span class="math display">\[\arg\min_{\mathcal{D}} \mathbb{E}_{w\sim\mathcal{D}} \Bigg[\frac{\log|\mathcal{D}|}{\ell(w)}\Bigg].\]</span></p>
+<p>Connection to entropy maximization? BPE objective is to maximize entropy, since it terminates when every symbol appears once. This means that as we move towards convergence, we take from the head of the bigram distribution and split its mass into the body. This is good when a has a very common postfix. However, when a symbol has infrequent postfixes, they will remain as remainders since BPE is run with early stopping. How to check this: Looks like this was wrong.</p>
+<p>New hypothesis: at convergence, BPE compression will be good (as good as ngram). Why this could be valid, for ngrams we make <em>many</em> more steps than we would with BPE, and thus converges faster (and maybe to a different point). This means that there are pieces that are not yet merged in BPE but you have already gotten because of the ngram heuristic. How to verify, run BPE for longer!</p>
+<p>Argument why a character based approach cannot be word based? Argue BPE <em>creates</em> new rare words because of its objective.</p>
+<p>Things we can rule out: There was little correlation between length and rank, so</p>
+<h2 id="for-paper">For paper</h2>
+<p>Argue that decreasing length of target is orthogonal to model size?</p>
+    </section>
+</article>
+
+        </main>
+
+        <footer>
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </footer>
+        <script>
+            renderMathInElement(document.body, {
+                display: [
+                    {left: "$", right: "$", display: true},
+                    {left: "\\[", right: "\\]", display: true},
+                    {left: ", right: ", display: false},
+                    {left: "\\(", right: "\\)", display: false}
+                ],
+                macros: {
+                    "\\bx": "\\mathbf{x}",
+                    "\\by": "\\mathbf{y}",
+                    "\\bz": "\\mathbf{z}",
+                    "\\bX": "\\mathcal{X}",
+                    "\\bY": "\\mathcal{Y}",
+                    "\\bZ": "\\mathcal{Z}",
+                }
+            });
+        </script>
+    </body>
+</html>
